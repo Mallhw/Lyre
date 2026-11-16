@@ -30,6 +30,9 @@ yarn-error.*
 .DS_Store
 *.pem
 
+# song files stay on the laptop and the web host, not in the public repo
+public/songs/
+
 # local env files
 .env*.local
 

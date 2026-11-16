@@ -91,5 +91,5 @@ export function useSyncedPlayer(source: number | string | null, playback: Playba
     } catch {}
   };
 
-  return { driftMs, unlock };
+  return { driftMs, unlock, ready: true };
 }

@@ -36,11 +36,17 @@ export function useSyncedPlayer(source: number | string | null, playback: Playba
   const bytesRef = useRef<ArrayBuffer | null>(null);
   const running = useRef<Running | null>(null);
   const [driftMs, setDriftMs] = useState<number | null>(null);
+  const [ready, setReady] = useState(false);
 
   // Download the track's bytes as soon as we know where it is.
   useEffect(() => {
     if (typeof source !== "string") return;
     let alive = true;
+    // A new song: drop the old one so nothing plays until this one is loaded.
+    stop();
+    bufferRef.current = null;
+    bytesRef.current = null;
+    setReady(false);
     fetch(source)
       .then((res) => res.arrayBuffer())
       .then((bytes) => {
@@ -60,7 +66,10 @@ export function useSyncedPlayer(source: number | string | null, playback: Playba
     if (!ctx || !bytes || bufferRef.current) return;
     // slice(0) copies the bytes, because decoding empties the buffer it is given.
     ctx.decodeAudioData(bytes.slice(0)).then((buf) => {
+      // Ignore a decode that finished after the DJ already switched songs.
+      if (bytesRef.current !== bytes) return;
       bufferRef.current = buf;
+      setReady(true);
     });
   }
 
@@ -156,5 +165,5 @@ export function useSyncedPlayer(source: number | string | null, playback: Playba
     decodeIfReady();
   };
 
-  return { driftMs, unlock };
+  return { driftMs, unlock, ready };
 }

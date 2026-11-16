@@ -125,6 +125,19 @@ export const restart = mutation({
   },
 });
 
+export const setTrack = mutation({
+  args: { roomId: v.id("rooms"), trackId: v.string() },
+  handler: async (ctx, args) => {
+    // Changing song stops playback, so phones can load it before the next start.
+    await ctx.db.patch(args.roomId, {
+      trackId: args.trackId,
+      playing: false,
+      pausedAt: 0,
+    });
+    return null;
+  },
+});
+
 export const setMuted = mutation({
   args: { id: v.id("devices"), muted: v.boolean() },
   handler: async (ctx, args) => {

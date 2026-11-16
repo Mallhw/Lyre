@@ -11,6 +11,7 @@ export default defineSchema({
     playing: v.boolean(),
     startAt: v.number(), // server ms at which track position 0 occurs (while playing)
     pausedAt: v.number(), // track position in seconds (while paused)
+    trackId: v.optional(v.string()), // which song; missing means the click track
   }).index("by_code", ["code"]),
 
   // One phone in a room.

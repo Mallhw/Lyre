@@ -6,9 +6,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
 import { DEVICE_ID, clockInfo, syncClock } from "../../lib/clock";
 import { useSyncedPlayer } from "../../lib/useSyncedPlayer";
-import { useTrackSource } from "../../lib/useTrackSource";
+import { TRACKS, trackById, trackSource } from "../../lib/tracks";
 
-const TRACK = require("../../../assets/audio/click.m4a");
 const ONLINE_MS = 20000;
 
 export default function Room() {
@@ -21,6 +20,7 @@ export default function Room() {
   const setMuted = useMutation(api.rooms.setMuted);
   const setNudge = useMutation(api.rooms.setNudge);
   const heartbeat = useMutation(api.rooms.heartbeat);
+  const setTrack = useMutation(api.rooms.setTrack);
   const join = useMutation(api.rooms.join);
 
   const [clock, setClock] = useState(clockInfo());
@@ -62,8 +62,9 @@ export default function Room() {
     return () => clearInterval(timer);
   }, [myId, heartbeat]);
 
-  const source = useTrackSource(TRACK);
-  const { driftMs, unlock } = useSyncedPlayer(
+  const track = trackById(room?.trackId);
+  const source = trackSource(room?.trackId);
+  const { driftMs, unlock, ready } = useSyncedPlayer(
     source,
     room && me && clock
       ? {
@@ -122,18 +123,24 @@ export default function Room() {
 
         {!soundOn ? (
           <Pressable
-            style={[styles.button, styles.enable, !source && { opacity: 0.5 }]}
-            disabled={!source}
+            style={[styles.button, styles.enable]}
             onPress={() => {
               unlock();
               setSoundOn(true);
             }}
           >
             <Text style={styles.primaryText}>
-              {source ? "Tap to turn on sound" : "Loading sound…"}
+              Tap to turn on sound
             </Text>
           </Pressable>
         ) : null}
+
+        <Text style={styles.label}>NOW PLAYING</Text>
+        <Text style={styles.trackTitle}>{track.title}</Text>
+        <Text style={styles.dim}>
+          {track.artist}
+          {soundOn && !ready ? "  ·  loading…" : ""}
+        </Text>
 
         {isHost ? (
           <View style={styles.row}>
@@ -152,6 +159,25 @@ export default function Room() {
             {me.muted ? "Muted by the DJ" : room.playing ? "Playing" : "Waiting for the DJ"}
           </Text>
         )}
+
+        {isHost ? (
+          <>
+            <Text style={styles.label}>SONGS</Text>
+            <View style={styles.chips}>
+              {TRACKS.map((t) => (
+                <Pressable
+                  key={t.id}
+                  style={[styles.chip, t.id === track.id && styles.chipOn]}
+                  onPress={() => {
+                    setTrack({ roomId: room._id, trackId: t.id });
+                  }}
+                >
+                  <Text style={styles.chipText}>{t.title}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </>
+        ) : null}
 
         <Text style={styles.label}>TIMING NUDGE (THIS PHONE)</Text>
         <View style={styles.row}>
@@ -207,6 +233,11 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", gap: 12, alignItems: "center", marginTop: 20 },
   button: { backgroundColor: "#23232e", borderRadius: 14, paddingVertical: 16, alignItems: "center" },
   primary: { backgroundColor: "#7c5cff" },
+  trackTitle: { color: "#fff", fontSize: 26, fontWeight: "700" },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  chip: { backgroundColor: "#23232e", borderRadius: 999, paddingVertical: 10, paddingHorizontal: 16 },
+  chipOn: { backgroundColor: "#7c5cff" },
+  chipText: { color: "#fff", fontSize: 15, fontWeight: "600" },
   enable: { backgroundColor: "#1f9d63", marginTop: 20 },
   primaryText: { color: "#fff", fontSize: 18, fontWeight: "700" },
   buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
