@@ -28,6 +28,19 @@ const PRESETS = [
     b: { track: "gotta-feeling", at: 234.0 },
   },
 ];
+type Preset = (typeof PRESETS)[number];
+const SAVED_KEY = "lyre-transitions";
+
+/** Transitions this phone saved earlier. They live in the browser's storage. */
+function loadSaved(): Preset[] {
+  try {
+    if (typeof localStorage === "undefined") return [];
+    return JSON.parse(localStorage.getItem(SAVED_KEY) ?? "[]") as Preset[];
+  } catch {
+    return [];
+  }
+}
+
 const PRESET_LEAD_S = 20; // how long deck A plays before the blend point
 const FADE_S = 16; // length of an automatic crossfade (32 beats at 128 BPM)
 
@@ -60,6 +73,7 @@ export default function Room() {
   const presetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fadeNow = useRef(0.5);
   const [presetStatus, setPresetStatus] = useState("");
+  const [saved, setSaved] = useState<Preset[]>(loadSaved);
   const join = useMutation(api.rooms.join);
 
   const [clock, setClock] = useState(clockInfo());
@@ -181,7 +195,7 @@ export default function Room() {
   };
 
   // Load both songs, line up their blend points exactly, and schedule the fade.
-  const runPreset = async (preset: (typeof PRESETS)[number]) => {
+  const runPreset = async (preset: Preset) => {
     if (fadeTimer.current) clearInterval(fadeTimer.current);
     if (presetTimer.current) clearTimeout(presetTimer.current);
     setPresetStatus("Loading…");
@@ -213,6 +227,28 @@ export default function Room() {
       );
     } catch {
       setPresetStatus("Couldn't load the transition. Try again.");
+    }
+  };
+
+  // Remember where both decks are right now as a reusable transition.
+  const saveBlend = () => {
+    const a = trackById(room.trackId);
+    const b = trackById(stateB.trackId);
+    const atA = room.playing ? (serverNow() - room.startAt) / 1000 : room.pausedAt;
+    const atB = stateB.playing ? (serverNow() - stateB.startAt) / 1000 : stateB.pausedAt;
+    const blend: Preset = {
+      name: `${a.title} → ${b.title}`,
+      detail: `Saved · blends at ${clockTime(atA)} into ${clockTime(atB)}`,
+      a: { track: a.id, at: Math.max(PRESET_LEAD_S, atA) },
+      b: { track: b.id, at: Math.max(0, atB) },
+    };
+    const next = [...saved, blend];
+    setSaved(next);
+    try {
+      localStorage.setItem(SAVED_KEY, JSON.stringify(next));
+      setPresetStatus("Saved to this phone.");
+    } catch {
+      setPresetStatus("Saved for now, but this browser won't keep it after a reload.");
     }
   };
 
@@ -434,9 +470,9 @@ export default function Room() {
         {isHost ? (
           <>
             <Text style={styles.label}>TRANSITIONS</Text>
-            {PRESETS.map((preset) => (
+            {[...PRESETS, ...saved].map((preset, i) => (
               <Pressable
-                key={preset.name}
+                key={preset.name + i}
                 style={[styles.button, styles.preset]}
                 onPress={() => {
                   runPreset(preset);
@@ -447,6 +483,9 @@ export default function Room() {
               </Pressable>
             ))}
             {presetStatus ? <Text style={styles.sync}>{presetStatus}</Text> : null}
+            <Pressable style={[styles.button, { marginTop: 10 }]} onPress={saveBlend}>
+              <Text style={styles.buttonText}>Save this blend (both decks, right now)</Text>
+            </Pressable>
             <View style={[styles.rowTight, { marginTop: 10 }]}>
               <Pressable
                 style={[styles.button, styles.primary, { flex: 1 }]}
@@ -577,7 +616,13 @@ const styles = StyleSheet.create({
   chip: { backgroundColor: "#23232e", borderRadius: 999, paddingVertical: 10, paddingHorizontal: 16 },
   chipOn: { backgroundColor: "#7c5cff" },
   chipB: { backgroundColor: "#e0692f" },
-  preset: { backgroundColor: "#2a2440", borderWidth: 1, borderColor: "#7c5cff", paddingHorizontal: 12 },
+  preset: {
+    backgroundColor: "#2a2440",
+    borderWidth: 1,
+    borderColor: "#7c5cff",
+    paddingHorizontal: 12,
+    marginBottom: 8,
+  },
   presetDetail: { color: "#b9b0e6", fontSize: 13, marginTop: 4 },
   small: { paddingHorizontal: 18, paddingVertical: 12, marginTop: 10 },
   time: {
