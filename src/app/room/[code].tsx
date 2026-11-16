@@ -21,6 +21,7 @@ export default function Room() {
   const setNudge = useMutation(api.rooms.setNudge);
   const heartbeat = useMutation(api.rooms.heartbeat);
   const setTrack = useMutation(api.rooms.setTrack);
+  const setVolume = useMutation(api.rooms.setVolume);
   const join = useMutation(api.rooms.join);
 
   const [clock, setClock] = useState(clockInfo());
@@ -72,6 +73,7 @@ export default function Room() {
           startAt: room.startAt,
           pausedAt: room.pausedAt,
           muted: me.muted,
+          volume: me.volume ?? 1,
           nudgeMs: me.nudgeMs,
         }
       : null,
@@ -193,6 +195,7 @@ export default function Room() {
         <Text style={styles.label}>PHONES ({devices.length})</Text>
         {devices.map((d) => {
           const online = now - d.lastSeen < ONLINE_MS;
+          const vol = d.volume ?? 1;
           return (
             <View key={d._id} style={styles.device}>
               <View style={{ flex: 1 }}>
@@ -202,9 +205,29 @@ export default function Room() {
                   {d.deviceId === DEVICE_ID ? "  (this phone)" : ""}
                 </Text>
                 <Text style={styles.dim}>
-                  {online ? (d.muted ? "Off" : "On") : "Offline"}
+                  {online ? (d.muted ? "Off" : `On · ${Math.round(vol * 100)}%`) : "Offline"}
                 </Text>
               </View>
+              {isHost ? (
+                <View style={styles.volume}>
+                  <Pressable
+                    style={styles.volButton}
+                    onPress={() => {
+                      setVolume({ id: d._id, volume: vol - 0.1 });
+                    }}
+                  >
+                    <Text style={styles.volText}>−</Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.volButton}
+                    onPress={() => {
+                      setVolume({ id: d._id, volume: vol + 0.1 });
+                    }}
+                  >
+                    <Text style={styles.volText}>+</Text>
+                  </Pressable>
+                </View>
+              ) : null}
               {isHost ? (
                 <Switch
                   value={!d.muted}
@@ -237,6 +260,16 @@ const styles = StyleSheet.create({
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: { backgroundColor: "#23232e", borderRadius: 999, paddingVertical: 10, paddingHorizontal: 16 },
   chipOn: { backgroundColor: "#7c5cff" },
+  volume: { flexDirection: "row", gap: 6, marginRight: 12 },
+  volButton: {
+    backgroundColor: "#2c2c39",
+    borderRadius: 10,
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  volText: { color: "#fff", fontSize: 22, fontWeight: "700" },
   chipText: { color: "#fff", fontSize: 15, fontWeight: "600" },
   enable: { backgroundColor: "#1f9d63", marginTop: 20 },
   primaryText: { color: "#fff", fontSize: 18, fontWeight: "700" },

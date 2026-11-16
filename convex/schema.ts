@@ -20,6 +20,7 @@ export default defineSchema({
     deviceId: v.string(),
     name: v.string(),
     muted: v.boolean(),
+    volume: v.optional(v.number()), // 0 to 1; missing means full volume
     nudgeMs: v.number(), // manual per-phone timing correction
     lastSeen: v.number(),
   })

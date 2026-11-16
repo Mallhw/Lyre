@@ -146,6 +146,14 @@ export const setMuted = mutation({
   },
 });
 
+export const setVolume = mutation({
+  args: { id: v.id("devices"), volume: v.number() },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.id, { volume: Math.max(0, Math.min(1, args.volume)) });
+    return null;
+  },
+});
+
 export const setNudge = mutation({
   args: { id: v.id("devices"), nudgeMs: v.number() },
   handler: async (ctx, args) => {

@@ -7,6 +7,7 @@ type Playback = {
   startAt: number; // server ms at which track position 0 occurs
   pausedAt: number; // seconds
   muted: boolean;
+  volume: number; // 0 to 1
   nudgeMs: number;
 };
 
@@ -36,7 +37,7 @@ export function useSyncedPlayer(source: number | string | null, playback: Playba
     const timer = setInterval(() => {
       const p = latest.current;
       if (!p) return;
-      player.volume = p.muted ? 0 : 1;
+      player.volume = p.muted ? 0 : p.volume;
       // iPhone Safari ignores volume changes from code, so set muted as well.
       player.muted = p.muted;
 

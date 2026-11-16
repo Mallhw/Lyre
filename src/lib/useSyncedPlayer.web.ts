@@ -14,6 +14,7 @@ type Playback = {
   startAt: number; // server ms at which track position 0 occurs
   pausedAt: number; // seconds
   muted: boolean;
+  volume: number; // 0 to 1
   nudgeMs: number;
 };
 
@@ -91,7 +92,8 @@ export function useSyncedPlayer(source: number | string | null, playback: Playba
       const buffer = bufferRef.current;
       if (!p || !ctx || !gain || !buffer) return;
 
-      gain.gain.value = p.muted ? 0 : 1;
+      // Squared so each step sounds like an even change in loudness.
+      gain.gain.value = p.muted ? 0 : p.volume * p.volume;
 
       if (!p.playing) {
         stop();
