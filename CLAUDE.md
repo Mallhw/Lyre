@@ -12,7 +12,7 @@ DJ booth. Built at **The Consumer Mobile Hackathon** (YC, San Francisco,
 Sunday November 15, 2026). Live web build: https://lyre-dj.expo.app.
 See `README.md` for what it does and how the sync works.
 
-- Repo: https://github.com/Mallhw/YC-Mobile-App-Hackathon (private, owner `Mallhw`)
+- Repo: https://github.com/Mallhw/Lyre (owner `Mallhw`; formerly YC-Mobile-App-Hackathon)
 - Stack: Expo SDK 58 + Expo Router + TypeScript (`src/app/`), Convex backend
   (`convex/`), expo-audio on native, Web Audio in the browser
   (`src/lib/useSyncedPlayer.web.ts`).
