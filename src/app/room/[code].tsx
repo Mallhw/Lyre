@@ -1,12 +1,13 @@
-import { useMutation, useQuery } from "convex/react";
+import { useConvex, useMutation, useQuery } from "convex/react";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
 import { DEVICE_ID, clockInfo, serverNow, syncClock } from "../../lib/clock";
 import { useSyncedPlayer } from "../../lib/useSyncedPlayer";
 import { TRACKS, trackById, trackSource } from "../../lib/tracks";
+import { Waveform } from "../../lib/Waveform";
 
 const ONLINE_MS = 20000;
 const ALL_BANDS = { low: true, mid: true, high: true };
@@ -15,6 +16,33 @@ const BAND_LABELS = [
   ["mid", "Mids"],
   ["high", "Highs"],
 ] as const;
+
+// Saved transitions. `at` is the moment in each song (seconds) that should
+// land together, taken from cue points lined up in DJ software. Both songs in
+// a preset must share a tempo, because Lyre does not change song speed.
+const PRESETS = [
+  {
+    name: "I Gotta Feeling → Feel So Close",
+    detail: "128 BPM · blends at 3:54 into 0:31",
+    a: { track: "gotta-feeling", at: 234.0 },
+    b: { track: "feel-so-close", at: 31.02 },
+  },
+];
+type Preset = (typeof PRESETS)[number];
+const SAVED_KEY = "lyre-transitions";
+
+/** Transitions this phone saved earlier. They live in the browser's storage. */
+function loadSaved(): Preset[] {
+  try {
+    if (typeof localStorage === "undefined") return [];
+    return JSON.parse(localStorage.getItem(SAVED_KEY) ?? "[]") as Preset[];
+  } catch {
+    return [];
+  }
+}
+
+const PRESET_LEAD_S = 20; // how long deck A plays before the blend point
+const FADE_S = 16; // length of an automatic crossfade (32 beats at 128 BPM)
 
 /** Seconds as m:ss, for the deck time displays. */
 function clockTime(seconds: number): string {
@@ -40,6 +68,12 @@ export default function Room() {
   const setFade = useMutation(api.rooms.setFade);
   const seek = useMutation(api.rooms.seek);
   const setBandAll = useMutation(api.rooms.setBandAll);
+  const convex = useConvex();
+  const fadeTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const presetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fadeNow = useRef(0.5);
+  const [presetStatus, setPresetStatus] = useState("");
+  const [saved, setSaved] = useState<Preset[]>(loadSaved);
   const join = useMutation(api.rooms.join);
 
   const [clock, setClock] = useState(clockInfo());
@@ -145,6 +179,79 @@ export default function Room() {
   }
 
   const devices = data?.devices ?? [];
+  fadeNow.current = fade;
+
+  // Slide the crossfader to `target` over `seconds`, in small steps.
+  const autoFade = (target: number, seconds: number) => {
+    if (fadeTimer.current) clearInterval(fadeTimer.current);
+    const from = fadeNow.current;
+    const steps = Math.max(1, Math.round(seconds * 4));
+    let step = 0;
+    fadeTimer.current = setInterval(() => {
+      step++;
+      setFade({ roomId: room._id, fade: from + ((target - from) * step) / steps });
+      if (step >= steps && fadeTimer.current) clearInterval(fadeTimer.current);
+    }, 250);
+  };
+
+  // Load both songs, line up their blend points exactly, and schedule the fade.
+  const runPreset = async (preset: Preset) => {
+    if (fadeTimer.current) clearInterval(fadeTimer.current);
+    if (presetTimer.current) clearTimeout(presetTimer.current);
+    setPresetStatus("Loading…");
+    try {
+      await setFade({ roomId: room._id, fade: 0 });
+      await setTrack({ roomId: room._id, trackId: preset.a.track });
+      await deckB({ roomId: room._id, action: "setTrack", trackId: preset.b.track });
+      await restart({ roomId: room._id });
+      await deckB({ roomId: room._id, action: "restart" });
+      // Read back the exact start times the server chose, then shift each
+      // deck so the two blend points fall on the same instant.
+      const fresh = await convex.query(api.rooms.get, { code: room.code });
+      const startA = fresh?.room.startAt ?? 0;
+      const startB = fresh?.room.deckB?.startAt ?? 0;
+      const deltaA = preset.a.at - PRESET_LEAD_S;
+      await seek({ roomId: room._id, deck: "A", deltaS: deltaA });
+      const newStartA = startA - deltaA * 1000;
+      const deltaB = (startB - newStartA - preset.a.at * 1000 + preset.b.at * 1000) / 1000;
+      await seek({ roomId: room._id, deck: "B", deltaS: deltaB });
+      setPresetStatus(`Deck A playing. Blend starts in about ${PRESET_LEAD_S - FADE_S / 2 + 2} s.`);
+      // Centre the fade on the blend point: half before it, half after.
+      presetTimer.current = setTimeout(
+        () => {
+          setPresetStatus("Blending into deck B…");
+          autoFade(1, FADE_S);
+          presetTimer.current = setTimeout(() => setPresetStatus(""), FADE_S * 1000 + 500);
+        },
+        (PRESET_LEAD_S + 2.5 - FADE_S / 2) * 1000,
+      );
+    } catch {
+      setPresetStatus("Couldn't load the transition. Try again.");
+    }
+  };
+
+  // Remember where both decks are right now as a reusable transition.
+  const saveBlend = () => {
+    const a = trackById(room.trackId);
+    const b = trackById(stateB.trackId);
+    const atA = room.playing ? (serverNow() - room.startAt) / 1000 : room.pausedAt;
+    const atB = stateB.playing ? (serverNow() - stateB.startAt) / 1000 : stateB.pausedAt;
+    const blend: Preset = {
+      name: `${a.title} → ${b.title}`,
+      detail: `Saved · blends at ${clockTime(atA)} into ${clockTime(atB)}`,
+      a: { track: a.id, at: Math.max(PRESET_LEAD_S, atA) },
+      b: { track: b.id, at: Math.max(0, atB) },
+    };
+    const next = [...saved, blend];
+    setSaved(next);
+    try {
+      localStorage.setItem(SAVED_KEY, JSON.stringify(next));
+      setPresetStatus("Saved to this phone.");
+    } catch {
+      setPresetStatus("Saved for now, but this browser won't keep it after a reload.");
+    }
+  };
+
   const posA = room.playing ? (serverNow() - room.startAt) / 1000 : room.pausedAt;
   const posB = stateB.playing ? (serverNow() - stateB.startAt) / 1000 : stateB.pausedAt;
   const syncLabel = !clock
@@ -188,6 +295,15 @@ export default function Room() {
 
         {isHost ? (
           <Text style={styles.label}>DECK A · {trackById(room.trackId).title.toUpperCase()}</Text>
+        ) : null}
+        {isHost ? (
+          <Waveform
+            trackId={trackById(room.trackId).id}
+            color="#7c5cff"
+            getPosition={() =>
+              room.playing ? (serverNow() - room.startAt) / 1000 : room.pausedAt
+            }
+          />
         ) : null}
         {isHost ? (
           <View style={styles.rowTight}>
@@ -248,6 +364,13 @@ export default function Room() {
         {isHost ? (
           <>
             <Text style={styles.label}>DECK B · {trackById(stateB.trackId).title.toUpperCase()}</Text>
+            <Waveform
+              trackId={trackById(stateB.trackId).id}
+              color="#e0692f"
+              getPosition={() =>
+                stateB.playing ? (serverNow() - stateB.startAt) / 1000 : stateB.pausedAt
+              }
+            />
             <View style={styles.rowTight}>
               <Pressable
                 style={[styles.button, styles.deckB, { flex: 1 }]}
@@ -346,6 +469,38 @@ export default function Room() {
 
         {isHost ? (
           <>
+            <Text style={styles.label}>TRANSITIONS</Text>
+            {[...PRESETS, ...saved].map((preset, i) => (
+              <Pressable
+                key={preset.name + i}
+                style={[styles.button, styles.preset]}
+                onPress={() => {
+                  runPreset(preset);
+                }}
+              >
+                <Text style={styles.primaryText}>{preset.name}</Text>
+                <Text style={styles.presetDetail}>{preset.detail}</Text>
+              </Pressable>
+            ))}
+            {presetStatus ? <Text style={styles.sync}>{presetStatus}</Text> : null}
+            <Pressable style={[styles.button, { marginTop: 10 }]} onPress={saveBlend}>
+              <Text style={styles.buttonText}>Save this blend (both decks, right now)</Text>
+            </Pressable>
+            <View style={[styles.rowTight, { marginTop: 10 }]}>
+              <Pressable
+                style={[styles.button, styles.primary, { flex: 1 }]}
+                onPress={() => autoFade(0, FADE_S)}
+              >
+                <Text style={styles.buttonText}>Auto fade to A</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.button, styles.deckB, { flex: 1 }]}
+                onPress={() => autoFade(1, FADE_S)}
+              >
+                <Text style={styles.buttonText}>Auto fade to B</Text>
+              </Pressable>
+            </View>
+
             <Text style={styles.label}>WHOLE ROOM</Text>
             <View style={styles.rowTight}>
               {BAND_LABELS.map(([key, label]) => {
@@ -461,6 +616,14 @@ const styles = StyleSheet.create({
   chip: { backgroundColor: "#23232e", borderRadius: 999, paddingVertical: 10, paddingHorizontal: 16 },
   chipOn: { backgroundColor: "#7c5cff" },
   chipB: { backgroundColor: "#e0692f" },
+  preset: {
+    backgroundColor: "#2a2440",
+    borderWidth: 1,
+    borderColor: "#7c5cff",
+    paddingHorizontal: 12,
+    marginBottom: 8,
+  },
+  presetDetail: { color: "#b9b0e6", fontSize: 13, marginTop: 4 },
   small: { paddingHorizontal: 18, paddingVertical: 12, marginTop: 10 },
   time: {
     flex: 1,
