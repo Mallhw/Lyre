@@ -8,6 +8,7 @@ type Playback = {
   pausedAt: number; // seconds
   muted: boolean;
   volume: number; // 0 to 1
+  bands: { low: boolean; mid: boolean; high: boolean }; // browser only; ignored here
   nudgeMs: number;
 };
 

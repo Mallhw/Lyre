@@ -21,6 +21,10 @@ export default defineSchema({
     name: v.string(),
     muted: v.boolean(),
     volume: v.optional(v.number()), // 0 to 1; missing means full volume
+    // Which frequency bands this phone plays; missing means all three.
+    bands: v.optional(
+      v.object({ low: v.boolean(), mid: v.boolean(), high: v.boolean() }),
+    ),
     nudgeMs: v.number(), // manual per-phone timing correction
     lastSeen: v.number(),
   })

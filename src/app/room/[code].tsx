@@ -9,6 +9,12 @@ import { useSyncedPlayer } from "../../lib/useSyncedPlayer";
 import { TRACKS, trackById, trackSource } from "../../lib/tracks";
 
 const ONLINE_MS = 20000;
+const ALL_BANDS = { low: true, mid: true, high: true };
+const BAND_LABELS = [
+  ["low", "Bass"],
+  ["mid", "Mids"],
+  ["high", "Highs"],
+] as const;
 
 export default function Room() {
   const { code } = useLocalSearchParams<{ code: string }>();
@@ -22,6 +28,7 @@ export default function Room() {
   const heartbeat = useMutation(api.rooms.heartbeat);
   const setTrack = useMutation(api.rooms.setTrack);
   const setVolume = useMutation(api.rooms.setVolume);
+  const setBands = useMutation(api.rooms.setBands);
   const join = useMutation(api.rooms.join);
 
   const [clock, setClock] = useState(clockInfo());
@@ -74,6 +81,7 @@ export default function Room() {
           pausedAt: room.pausedAt,
           muted: me.muted,
           volume: me.volume ?? 1,
+          bands: me.bands ?? ALL_BANDS,
           nudgeMs: me.nudgeMs,
         }
       : null,
@@ -196,8 +204,10 @@ export default function Room() {
         {devices.map((d) => {
           const online = now - d.lastSeen < ONLINE_MS;
           const vol = d.volume ?? 1;
+          const bands = d.bands ?? ALL_BANDS;
           return (
             <View key={d._id} style={styles.device}>
+             <View style={styles.deviceTop}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.deviceName}>
                   {d.name}
@@ -237,6 +247,22 @@ export default function Room() {
                   trackColor={{ true: "#7c5cff", false: "#33333f" }}
                 />
               ) : null}
+             </View>
+              {isHost ? (
+                <View style={styles.bands}>
+                  {BAND_LABELS.map(([key, label]) => (
+                    <Pressable
+                      key={key}
+                      style={[styles.band, bands[key] && styles.bandOn]}
+                      onPress={() => {
+                        setBands({ id: d._id, bands: { ...bands, [key]: !bands[key] } });
+                      }}
+                    >
+                      <Text style={styles.bandText}>{label}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              ) : null}
             </View>
           );
         })}
@@ -275,9 +301,19 @@ const styles = StyleSheet.create({
   primaryText: { color: "#fff", fontSize: 18, fontWeight: "700" },
   buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
   nudge: { color: "#fff", fontSize: 17, width: 80, textAlign: "center", fontVariant: ["tabular-nums"] },
-  device: {
-    flexDirection: "row",
+  deviceTop: { flexDirection: "row", alignItems: "center" },
+  bands: { flexDirection: "row", gap: 8, marginTop: 12 },
+  band: {
+    flex: 1,
+    backgroundColor: "#23232e",
+    borderRadius: 10,
+    paddingVertical: 10,
     alignItems: "center",
+    opacity: 0.55,
+  },
+  bandOn: { backgroundColor: "#1f9d63", opacity: 1 },
+  bandText: { color: "#fff", fontSize: 14, fontWeight: "700" },
+  device: {
     backgroundColor: "#17171f",
     borderRadius: 14,
     padding: 16,

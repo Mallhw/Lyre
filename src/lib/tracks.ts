@@ -16,6 +16,16 @@ export const TRACKS: Track[] = [
   { id: "we-found-love", title: "We Found Love", artist: "Rihanna" },
   { id: "clarity", title: "Clarity", artist: "Zedd" },
   { id: "titi", title: "Tití Me Preguntó", artist: "Bad Bunny" },
+  { id: "sorry", title: "Sorry", artist: "Justin Bieber" },
+  { id: "low", title: "Low", artist: "Flo Rida" },
+  { id: "starships", title: "Starships", artist: "Nicki Minaj" },
+  { id: "cant-hold-us", title: "Can't Hold Us", artist: "Macklemore & Ryan Lewis" },
+  { id: "dont-stop-the-music", title: "Don't Stop The Music", artist: "Rihanna" },
+  { id: "hotel-room-service", title: "Hotel Room Service", artist: "Pitbull" },
+  { id: "feel-so-close", title: "Feel So Close", artist: "Calvin Harris" },
+  { id: "ibiza", title: "I Took A Pill In Ibiza", artist: "Mike Posner (SeeB Remix)" },
+  { id: "dance-with-somebody", title: "I Wanna Dance With Somebody", artist: "Whitney Houston" },
+  { id: "super-shy", title: "Super Shy", artist: "NewJeans" },
 ];
 
 export function trackById(id: string | undefined): Track {

@@ -15,12 +15,53 @@ type Playback = {
   pausedAt: number; // seconds
   muted: boolean;
   volume: number; // 0 to 1
+  bands: { low: boolean; mid: boolean; high: boolean };
   nudgeMs: number;
 };
 
 const CHECK_MS = 200;
 const RESCHEDULE_S = 0.012; // re-align when further off than this
 const LEAD_S = 0.1; // how far ahead a mid-song start is scheduled
+const BASS_HZ = 220; // below this is the Bass band
+const HIGHS_HZ = 2500; // above this is the Highs band
+
+type Mixer = {
+  inputs: AudioNode[]; // the song connects to all three band chains
+  low: GainNode;
+  mid: GainNode;
+  high: GainNode;
+};
+
+/**
+ * A three-band DJ mixer: the song is split into bass, mids and highs by
+ * filters, each band has its own on/off gain, and the three are added back
+ * together. Two filters in a row per edge give a steeper, cleaner cut.
+ */
+function buildMixer(ctx: AudioContext, out: AudioNode): Mixer {
+  const filter = (type: BiquadFilterType, hz: number) => {
+    const f = ctx.createBiquadFilter();
+    f.type = type;
+    f.frequency.value = hz;
+    f.Q.value = 0.7;
+    return f;
+  };
+  const chain = (filters: BiquadFilterNode[]) => {
+    const gain = ctx.createGain();
+    for (let i = 0; i < filters.length - 1; i++) filters[i].connect(filters[i + 1]);
+    filters[filters.length - 1].connect(gain);
+    gain.connect(out);
+    return { head: filters[0], gain };
+  };
+  const low = chain([filter("lowpass", BASS_HZ), filter("lowpass", BASS_HZ)]);
+  const mid = chain([
+    filter("highpass", BASS_HZ),
+    filter("highpass", BASS_HZ),
+    filter("lowpass", HIGHS_HZ),
+    filter("lowpass", HIGHS_HZ),
+  ]);
+  const high = chain([filter("highpass", HIGHS_HZ), filter("highpass", HIGHS_HZ)]);
+  return { inputs: [low.head, mid.head, high.head], low: low.gain, mid: mid.gain, high: high.gain };
+}
 
 type Running = {
   node: AudioBufferSourceNode;
@@ -33,6 +74,7 @@ export function useSyncedPlayer(source: number | string | null, playback: Playba
   latest.current = playback;
   const ctxRef = useRef<AudioContext | null>(null);
   const gainRef = useRef<GainNode | null>(null);
+  const mixerRef = useRef<Mixer | null>(null);
   const bufferRef = useRef<AudioBuffer | null>(null);
   const bytesRef = useRef<ArrayBuffer | null>(null);
   const running = useRef<Running | null>(null);
@@ -90,10 +132,16 @@ export function useSyncedPlayer(source: number | string | null, playback: Playba
       const ctx = ctxRef.current;
       const gain = gainRef.current;
       const buffer = bufferRef.current;
-      if (!p || !ctx || !gain || !buffer) return;
+      const mixer = mixerRef.current;
+      if (!p || !ctx || !gain || !buffer || !mixer) return;
 
       // Squared so each step sounds like an even change in loudness.
       gain.gain.value = p.muted ? 0 : p.volume * p.volume;
+      // A short ramp instead of a hard switch, so cutting a band doesn't click.
+      const t = ctx.currentTime;
+      mixer.low.gain.setTargetAtTime(p.bands.low ? 1 : 0, t, 0.015);
+      mixer.mid.gain.setTargetAtTime(p.bands.mid ? 1 : 0, t, 0.015);
+      mixer.high.gain.setTargetAtTime(p.bands.high ? 1 : 0, t, 0.015);
 
       if (!p.playing) {
         stop();
@@ -123,7 +171,7 @@ export function useSyncedPlayer(source: number | string | null, playback: Playba
       const node = ctx.createBufferSource();
       node.buffer = buffer;
       node.loop = true;
-      node.connect(gain);
+      for (const input of mixer.inputs) node.connect(input);
 
       let ctxStart: number;
       let offset: number;
@@ -163,6 +211,7 @@ export function useSyncedPlayer(source: number | string | null, playback: Playba
     gain.connect(ctx.destination);
     ctxRef.current = ctx;
     gainRef.current = gain;
+    mixerRef.current = buildMixer(ctx, gain);
     ctx.resume();
     decodeIfReady();
   };
