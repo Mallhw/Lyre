@@ -1,11 +1,12 @@
 import { useMutation, useQuery } from "convex/react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
 import { DEVICE_ID, clockInfo, syncClock } from "../../lib/clock";
 import { useSyncedPlayer } from "../../lib/useSyncedPlayer";
+import { useTrackSource } from "../../lib/useTrackSource";
 
 const TRACK = require("../../../assets/audio/click.m4a");
 const ONLINE_MS = 20000;
@@ -20,13 +21,23 @@ export default function Room() {
   const setMuted = useMutation(api.rooms.setMuted);
   const setNudge = useMutation(api.rooms.setNudge);
   const heartbeat = useMutation(api.rooms.heartbeat);
+  const join = useMutation(api.rooms.join);
 
   const [clock, setClock] = useState(clockInfo());
   const [now, setNow] = useState(Date.now());
+  // Only the browser needs a tap before it will play sound.
+  const [soundOn, setSoundOn] = useState(Platform.OS !== "web");
 
   const me = data?.devices.find((d) => d.deviceId === DEVICE_ID) ?? null;
   const room = data?.room ?? null;
   const isHost = room?.hostDeviceId === DEVICE_ID;
+
+  // Opening a shared /room/CODE link joins the room without typing the code.
+  const needsJoin = !!room && !me;
+  useEffect(() => {
+    if (!needsJoin || !code) return;
+    join({ code, deviceId: DEVICE_ID, name: "Phone " + DEVICE_ID.slice(0, 3).toUpperCase() }).catch(() => {});
+  }, [needsJoin, code, join]);
 
   // Measure the clock offset on entry, then keep refreshing it.
   useEffect(() => {
@@ -51,8 +62,9 @@ export default function Room() {
     return () => clearInterval(timer);
   }, [myId, heartbeat]);
 
-  const { driftMs } = useSyncedPlayer(
-    TRACK,
+  const source = useTrackSource(TRACK);
+  const { driftMs, unlock } = useSyncedPlayer(
+    source,
     room && me && clock
       ? {
           playing: room.playing,
@@ -71,10 +83,17 @@ export default function Room() {
       </SafeAreaView>
     );
   }
+  if (room && !me) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <Text style={styles.dim}>Joining room {room.code}…</Text>
+      </SafeAreaView>
+    );
+  }
   if (!room || !me) {
     return (
       <SafeAreaView style={styles.container}>
-        <Text style={styles.dim}>This phone isn't in room {code}.</Text>
+        <Text style={styles.dim}>There's no room {code}.</Text>
         <Pressable style={styles.button} onPress={() => router.replace("/")}>
           <Text style={styles.buttonText}>Back</Text>
         </Pressable>
@@ -100,6 +119,21 @@ export default function Room() {
         <Text style={[styles.sync, driftMs !== null && Math.abs(driftMs) > 30 && styles.warn]}>
           {syncLabel}
         </Text>
+
+        {!soundOn ? (
+          <Pressable
+            style={[styles.button, styles.enable, !source && { opacity: 0.5 }]}
+            disabled={!source}
+            onPress={() => {
+              unlock();
+              setSoundOn(true);
+            }}
+          >
+            <Text style={styles.primaryText}>
+              {source ? "Tap to turn on sound" : "Loading sound…"}
+            </Text>
+          </Pressable>
+        ) : null}
 
         {isHost ? (
           <View style={styles.row}>
@@ -173,6 +207,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", gap: 12, alignItems: "center", marginTop: 20 },
   button: { backgroundColor: "#23232e", borderRadius: 14, paddingVertical: 16, alignItems: "center" },
   primary: { backgroundColor: "#7c5cff" },
+  enable: { backgroundColor: "#1f9d63", marginTop: 20 },
   primaryText: { color: "#fff", fontSize: 18, fontWeight: "700" },
   buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
   nudge: { color: "#fff", fontSize: 17, width: 80, textAlign: "center", fontVariant: ["tabular-nums"] },
