@@ -44,6 +44,8 @@ function loadSaved(): Preset[] {
 const PRESET_LEAD_S = 20; // how long deck A plays before the blend point
 const FADE_S = 16; // length of an automatic crossfade (32 beats at 128 BPM)
 
+const DISPLAY = { dataSet: { display: "1" } } as object;
+
 /** Seconds as m:ss, for the deck time displays. */
 function clockTime(seconds: number): string {
   const s = Math.max(0, Math.floor(seconds));
@@ -264,7 +266,7 @@ export default function Room() {
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
         <Text style={styles.label}>ROOM</Text>
-        <Text style={styles.code}>{room.code}</Text>
+        <Text style={styles.code} {...DISPLAY}>{room.code}</Text>
         <Text style={styles.dim}>
           {isHost ? "You're the DJ" : "Speaker"} · {me.name}
         </Text>
@@ -287,7 +289,7 @@ export default function Room() {
         ) : null}
 
         <Text style={styles.label}>DECK {myDeck} · NOW PLAYING ON THIS PHONE</Text>
-        <Text style={styles.trackTitle}>{track.title}</Text>
+        <Text style={styles.trackTitle} {...DISPLAY}>{track.title}</Text>
         <Text style={styles.dim}>
           {track.artist}
           {soundOn && !ready ? "  ·  loading…" : ""}
@@ -611,7 +613,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", gap: 12, alignItems: "center", marginTop: 20 },
   button: { backgroundColor: "#23232e", borderRadius: 14, paddingVertical: 16, alignItems: "center" },
   primary: { backgroundColor: "#7c5cff" },
-  trackTitle: { color: "#fff", fontSize: 26, fontWeight: "700" },
+  trackTitle: { color: "#fff", fontSize: 44, lineHeight: 46 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: { backgroundColor: "#23232e", borderRadius: 999, paddingVertical: 10, paddingHorizontal: 16 },
   chipOn: { backgroundColor: "#7c5cff" },

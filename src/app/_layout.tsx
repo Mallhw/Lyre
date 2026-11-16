@@ -4,17 +4,21 @@ import { StatusBar } from "expo-status-bar";
 import { Platform, Text, View } from "react-native";
 import { CONVEX_URL } from "../lib/clock";
 
-// In the browser, load Space Grotesk and apply it to all text. React Native
+// In the browser, load the app's fonts and apply them to all text. React Native
 // text doesn't inherit fonts, so one CSS rule is simpler than styling every Text.
 if (Platform.OS === "web" && typeof document !== "undefined") {
   const link = document.createElement("link");
   link.rel = "stylesheet";
   link.href =
-    "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap";
+    "https://fonts.googleapis.com/css2?family=Jersey+10&family=Space+Mono:wght@400;700&display=swap";
   document.head.appendChild(link);
   const style = document.createElement("style");
-  style.textContent =
-    "* { font-family: 'Space Grotesk', -apple-system, system-ui, sans-serif !important; }";
+  // Space Mono for everything, a tall pixel face for the big display text
+  // (elements marked data-display), and square corners throughout.
+  style.textContent = [
+    "* { font-family: 'Space Mono', ui-monospace, monospace !important; border-radius: 0 !important; }",
+    "[data-display] { font-family: 'Jersey 10', 'Space Mono', monospace !important; letter-spacing: 0.04em; text-transform: uppercase; }",
+  ].join("\n");
   document.head.appendChild(style);
 }
 

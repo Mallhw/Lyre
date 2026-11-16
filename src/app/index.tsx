@@ -13,6 +13,8 @@ import {
 import { api } from "../../convex/_generated/api";
 import { DEVICE_ID } from "../lib/clock";
 
+const DISPLAY = { dataSet: { display: "1" } } as object;
+
 export default function Home() {
   const router = useRouter();
   const createRoom = useMutation(api.rooms.create);
@@ -54,7 +56,7 @@ export default function Home() {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
       style={styles.container}
     >
-      <Text style={styles.title}>Lyre</Text>
+      <Text style={styles.title} {...DISPLAY}>Lyre</Text>
       <Text style={styles.subtitle}>Every phone is a speaker. One phone runs the set.</Text>
 
       <TextInput
@@ -100,7 +102,7 @@ export default function Home() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: "center", padding: 28, backgroundColor: "#0b0b0f" },
-  title: { color: "#fff", fontSize: 44, fontWeight: "800" },
+  title: { color: "#fff", fontSize: 96, lineHeight: 96 },
   subtitle: { color: "#9a9aa8", fontSize: 16, marginTop: 6, marginBottom: 36 },
   input: {
     backgroundColor: "#17171f",
