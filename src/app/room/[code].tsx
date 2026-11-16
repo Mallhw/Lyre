@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
-import { DEVICE_ID, clockInfo, syncClock } from "../../lib/clock";
+import { DEVICE_ID, clockInfo, serverNow, syncClock } from "../../lib/clock";
 import { useSyncedPlayer } from "../../lib/useSyncedPlayer";
 import { TRACKS, trackById, trackSource } from "../../lib/tracks";
 
@@ -15,6 +15,12 @@ const BAND_LABELS = [
   ["mid", "Mids"],
   ["high", "Highs"],
 ] as const;
+
+/** Seconds as m:ss, for the deck time displays. */
+function clockTime(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
 
 export default function Room() {
   const { code } = useLocalSearchParams<{ code: string }>();
@@ -32,10 +38,18 @@ export default function Room() {
   const deckB = useMutation(api.rooms.deckB);
   const setDeck = useMutation(api.rooms.setDeck);
   const setFade = useMutation(api.rooms.setFade);
+  const seek = useMutation(api.rooms.seek);
+  const setBandAll = useMutation(api.rooms.setBandAll);
   const join = useMutation(api.rooms.join);
 
   const [clock, setClock] = useState(clockInfo());
   const [now, setNow] = useState(Date.now());
+  // Redraw twice a second so the deck time displays keep moving.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => setTick((n) => n + 1), 500);
+    return () => clearInterval(timer);
+  }, []);
   // Only the browser needs a tap before it will play sound.
   const [soundOn, setSoundOn] = useState(Platform.OS !== "web");
 
@@ -131,6 +145,8 @@ export default function Room() {
   }
 
   const devices = data?.devices ?? [];
+  const posA = room.playing ? (serverNow() - room.startAt) / 1000 : room.pausedAt;
+  const posB = stateB.playing ? (serverNow() - stateB.startAt) / 1000 : stateB.pausedAt;
   const syncLabel = !clock
     ? "Syncing clock…"
     : driftMs === null
@@ -193,6 +209,25 @@ export default function Room() {
 
         {isHost ? (
           <>
+            <View style={styles.rowTight}>
+              <Pressable
+                style={[styles.button, styles.small]}
+                onPress={() => {
+                  seek({ roomId: room._id, deck: "A", deltaS: -15 });
+                }}
+              >
+                <Text style={styles.buttonText}>−15s</Text>
+              </Pressable>
+              <Text style={styles.time}>{clockTime(posA)}</Text>
+              <Pressable
+                style={[styles.button, styles.small]}
+                onPress={() => {
+                  seek({ roomId: room._id, deck: "A", deltaS: 15 });
+                }}
+              >
+                <Text style={styles.buttonText}>+15s</Text>
+              </Pressable>
+            </View>
             <Text style={styles.label}>DECK A SONGS</Text>
             <View style={styles.chips}>
               {TRACKS.map((t) => (
@@ -229,6 +264,25 @@ export default function Room() {
                 }}
               >
                 <Text style={styles.buttonText}>Restart B</Text>
+              </Pressable>
+            </View>
+            <View style={styles.rowTight}>
+              <Pressable
+                style={[styles.button, styles.small]}
+                onPress={() => {
+                  seek({ roomId: room._id, deck: "B", deltaS: -15 });
+                }}
+              >
+                <Text style={styles.buttonText}>−15s</Text>
+              </Pressable>
+              <Text style={styles.time}>{clockTime(posB)}</Text>
+              <Pressable
+                style={[styles.button, styles.small]}
+                onPress={() => {
+                  seek({ roomId: room._id, deck: "B", deltaS: 15 });
+                }}
+              >
+                <Text style={styles.buttonText}>+15s</Text>
               </Pressable>
             </View>
             <Text style={styles.label}>DECK B SONGS</Text>
@@ -289,6 +343,28 @@ export default function Room() {
             <Text style={styles.buttonText}>Later</Text>
           </Pressable>
         </View>
+
+        {isHost ? (
+          <>
+            <Text style={styles.label}>WHOLE ROOM</Text>
+            <View style={styles.rowTight}>
+              {BAND_LABELS.map(([key, label]) => {
+                const allOn = devices.every((d) => (d.bands ?? ALL_BANDS)[key]);
+                return (
+                  <Pressable
+                    key={key}
+                    style={[styles.band, allOn && styles.bandOn, { paddingVertical: 16 }]}
+                    onPress={() => {
+                      setBandAll({ roomId: room._id, band: key, on: !allOn });
+                    }}
+                  >
+                    <Text style={styles.bandText}>{allOn ? label : `${label} cut`}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </>
+        ) : null}
 
         <Text style={styles.label}>PHONES ({devices.length})</Text>
         {devices.map((d) => {
@@ -385,6 +461,16 @@ const styles = StyleSheet.create({
   chip: { backgroundColor: "#23232e", borderRadius: 999, paddingVertical: 10, paddingHorizontal: 16 },
   chipOn: { backgroundColor: "#7c5cff" },
   chipB: { backgroundColor: "#e0692f" },
+  small: { paddingHorizontal: 18, paddingVertical: 12, marginTop: 10 },
+  time: {
+    flex: 1,
+    color: "#fff",
+    fontSize: 22,
+    fontWeight: "700",
+    textAlign: "center",
+    marginTop: 10,
+    fontVariant: ["tabular-nums"],
+  },
   deckA: { backgroundColor: "#7c5cff" },
   deckB: { backgroundColor: "#e0692f" },
   rowTight: { flexDirection: "row", gap: 12, alignItems: "center" },

@@ -176,6 +176,54 @@ export const deckB = mutation({
   },
 });
 
+// Jump a deck forward or back. Moving startAt moves the whole timeline, so
+// every phone on that deck follows without any extra message.
+export const seek = mutation({
+  args: {
+    roomId: v.id("rooms"),
+    deck: v.union(v.literal("A"), v.literal("B")),
+    deltaS: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const room = await ctx.db.get(args.roomId);
+    if (!room) return null;
+    const now = Date.now();
+    const shift = (d: { playing: boolean; startAt: number; pausedAt: number }) => {
+      if (d.playing) {
+        const position = Math.max(0, (now - d.startAt) / 1000 + args.deltaS);
+        return { startAt: now - position * 1000, pausedAt: d.pausedAt };
+      }
+      return { startAt: d.startAt, pausedAt: Math.max(0, d.pausedAt + args.deltaS) };
+    };
+    if (args.deck === "A") {
+      await ctx.db.patch(args.roomId, shift(room));
+    } else if (room.deckB) {
+      await ctx.db.patch(args.roomId, { deckB: { ...room.deckB, ...shift(room.deckB) } });
+    }
+    return null;
+  },
+});
+
+// Switch one band on or off for every phone in the room at once.
+export const setBandAll = mutation({
+  args: {
+    roomId: v.id("rooms"),
+    band: v.union(v.literal("low"), v.literal("mid"), v.literal("high")),
+    on: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const devices = await ctx.db
+      .query("devices")
+      .withIndex("by_room", (q) => q.eq("roomId", args.roomId))
+      .take(50);
+    for (const d of devices) {
+      const bands = d.bands ?? { low: true, mid: true, high: true };
+      await ctx.db.patch(d._id, { bands: { ...bands, [args.band]: args.on } });
+    }
+    return null;
+  },
+});
+
 export const setDeck = mutation({
   args: { id: v.id("devices"), deck: v.union(v.literal("A"), v.literal("B")) },
   handler: async (ctx, args) => {
