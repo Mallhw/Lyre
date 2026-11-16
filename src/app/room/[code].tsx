@@ -22,10 +22,10 @@ const BAND_LABELS = [
 // a preset must share a tempo, because Lyre does not change song speed.
 const PRESETS = [
   {
-    name: "Feel So Close → I Gotta Feeling",
-    detail: "128 BPM · blends at 3:01 into 3:54",
-    a: { track: "feel-so-close", at: 181.49 },
-    b: { track: "gotta-feeling", at: 234.0 },
+    name: "I Gotta Feeling → Feel So Close",
+    detail: "128 BPM · blends at 3:54 into 0:31",
+    a: { track: "gotta-feeling", at: 234.0 },
+    b: { track: "feel-so-close", at: 31.02 },
   },
 ];
 type Preset = (typeof PRESETS)[number];
