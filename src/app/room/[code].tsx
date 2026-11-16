@@ -7,6 +7,7 @@ import { api } from "../../../convex/_generated/api";
 import { DEVICE_ID, clockInfo, serverNow, syncClock } from "../../lib/clock";
 import { useSyncedPlayer } from "../../lib/useSyncedPlayer";
 import { TRACKS, trackById, trackSource } from "../../lib/tracks";
+import { Waveform } from "../../lib/Waveform";
 
 const ONLINE_MS = 20000;
 const ALL_BANDS = { low: true, mid: true, high: true };
@@ -190,6 +191,15 @@ export default function Room() {
           <Text style={styles.label}>DECK A · {trackById(room.trackId).title.toUpperCase()}</Text>
         ) : null}
         {isHost ? (
+          <Waveform
+            trackId={trackById(room.trackId).id}
+            color="#7c5cff"
+            getPosition={() =>
+              room.playing ? (serverNow() - room.startAt) / 1000 : room.pausedAt
+            }
+          />
+        ) : null}
+        {isHost ? (
           <View style={styles.rowTight}>
             <Pressable
               style={[styles.button, styles.primary, { flex: 1 }]}
@@ -248,6 +258,13 @@ export default function Room() {
         {isHost ? (
           <>
             <Text style={styles.label}>DECK B · {trackById(stateB.trackId).title.toUpperCase()}</Text>
+            <Waveform
+              trackId={trackById(stateB.trackId).id}
+              color="#e0692f"
+              getPosition={() =>
+                stateB.playing ? (serverNow() - stateB.startAt) / 1000 : stateB.pausedAt
+              }
+            />
             <View style={styles.rowTight}>
               <Pressable
                 style={[styles.button, styles.deckB, { flex: 1 }]}
