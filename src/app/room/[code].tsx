@@ -29,6 +29,9 @@ export default function Room() {
   const setTrack = useMutation(api.rooms.setTrack);
   const setVolume = useMutation(api.rooms.setVolume);
   const setBands = useMutation(api.rooms.setBands);
+  const deckB = useMutation(api.rooms.deckB);
+  const setDeck = useMutation(api.rooms.setDeck);
+  const setFade = useMutation(api.rooms.setFade);
   const join = useMutation(api.rooms.join);
 
   const [clock, setClock] = useState(clockInfo());
@@ -70,17 +73,32 @@ export default function Room() {
     return () => clearInterval(timer);
   }, [myId, heartbeat]);
 
-  const track = trackById(room?.trackId);
-  const source = trackSource(room?.trackId);
+  // This phone follows the song and timeline of whichever deck it is on.
+  const myDeck = me?.deck === "B" ? "B" : "A";
+  const stateB = room?.deckB ?? { trackId: "click", playing: false, startAt: 0, pausedAt: 0 };
+  const mine =
+    myDeck === "B"
+      ? stateB
+      : {
+          trackId: room?.trackId,
+          playing: room?.playing ?? false,
+          startAt: room?.startAt ?? 0,
+          pausedAt: room?.pausedAt ?? 0,
+        };
+  // Crossfader: at the centre both decks are full; past it one side fades out.
+  const fade = room?.fade ?? 0.5;
+  const fadeGain = myDeck === "A" ? (fade <= 0.5 ? 1 : 2 * (1 - fade)) : fade >= 0.5 ? 1 : 2 * fade;
+  const track = trackById(mine.trackId);
+  const source = trackSource(mine.trackId);
   const { driftMs, unlock, ready } = useSyncedPlayer(
     source,
     room && me && clock
       ? {
-          playing: room.playing,
-          startAt: room.startAt,
-          pausedAt: room.pausedAt,
+          playing: mine.playing,
+          startAt: mine.startAt,
+          pausedAt: mine.pausedAt,
           muted: me.muted,
-          volume: me.volume ?? 1,
+          volume: (me.volume ?? 1) * fadeGain,
           bands: me.bands ?? ALL_BANDS,
           nudgeMs: me.nudgeMs,
         }
@@ -145,7 +163,7 @@ export default function Room() {
           </Pressable>
         ) : null}
 
-        <Text style={styles.label}>NOW PLAYING</Text>
+        <Text style={styles.label}>DECK {myDeck} · NOW PLAYING ON THIS PHONE</Text>
         <Text style={styles.trackTitle}>{track.title}</Text>
         <Text style={styles.dim}>
           {track.artist}
@@ -153,7 +171,10 @@ export default function Room() {
         </Text>
 
         {isHost ? (
-          <View style={styles.row}>
+          <Text style={styles.label}>DECK A · {trackById(room.trackId).title.toUpperCase()}</Text>
+        ) : null}
+        {isHost ? (
+          <View style={styles.rowTight}>
             <Pressable
               style={[styles.button, styles.primary, { flex: 1 }]}
               onPress={() => (room.playing ? pause({ roomId: room._id }) : play({ roomId: room._id }))}
@@ -166,13 +187,13 @@ export default function Room() {
           </View>
         ) : (
           <Text style={styles.state}>
-            {me.muted ? "Muted by the DJ" : room.playing ? "Playing" : "Waiting for the DJ"}
+            {me.muted ? "Muted by the DJ" : mine.playing ? "Playing" : "Waiting for the DJ"}
           </Text>
         )}
 
         {isHost ? (
           <>
-            <Text style={styles.label}>SONGS</Text>
+            <Text style={styles.label}>DECK A SONGS</Text>
             <View style={styles.chips}>
               {TRACKS.map((t) => (
                 <Pressable
@@ -185,6 +206,75 @@ export default function Room() {
                   <Text style={styles.chipText}>{t.title}</Text>
                 </Pressable>
               ))}
+            </View>
+          </>
+        ) : null}
+
+        {isHost ? (
+          <>
+            <Text style={styles.label}>DECK B · {trackById(stateB.trackId).title.toUpperCase()}</Text>
+            <View style={styles.rowTight}>
+              <Pressable
+                style={[styles.button, styles.deckB, { flex: 1 }]}
+                onPress={() => {
+                  deckB({ roomId: room._id, action: stateB.playing ? "pause" : "play" });
+                }}
+              >
+                <Text style={styles.primaryText}>{stateB.playing ? "Pause B" : "Play B"}</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.button, { flex: 1 }]}
+                onPress={() => {
+                  deckB({ roomId: room._id, action: "restart" });
+                }}
+              >
+                <Text style={styles.buttonText}>Restart B</Text>
+              </Pressable>
+            </View>
+            <Text style={styles.label}>DECK B SONGS</Text>
+            <View style={styles.chips}>
+              {TRACKS.map((t) => (
+                <Pressable
+                  key={t.id}
+                  style={[styles.chip, t.id === stateB.trackId && styles.chipB]}
+                  onPress={() => {
+                    deckB({ roomId: room._id, action: "setTrack", trackId: t.id });
+                  }}
+                >
+                  <Text style={styles.chipText}>{t.title}</Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <Text style={styles.label}>
+              CROSSFADER · A {Math.round((fade <= 0.5 ? 1 : 2 * (1 - fade)) * 100)}% · B{" "}
+              {Math.round((fade >= 0.5 ? 1 : 2 * fade) * 100)}%
+            </Text>
+            <View style={styles.rowTight}>
+              <Pressable
+                style={[styles.button, styles.primary, { flex: 1 }]}
+                onPress={() => {
+                  setFade({ roomId: room._id, fade: fade - 0.1 });
+                }}
+              >
+                <Text style={styles.primaryText}>◀ A</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.button, { flex: 1 }]}
+                onPress={() => {
+                  setFade({ roomId: room._id, fade: 0.5 });
+                }}
+              >
+                <Text style={styles.buttonText}>Both</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.button, styles.deckB, { flex: 1 }]}
+                onPress={() => {
+                  setFade({ roomId: room._id, fade: fade + 0.1 });
+                }}
+              >
+                <Text style={styles.primaryText}>B ▶</Text>
+              </Pressable>
             </View>
           </>
         ) : null}
@@ -261,6 +351,14 @@ export default function Room() {
                       <Text style={styles.bandText}>{label}</Text>
                     </Pressable>
                   ))}
+                  <Pressable
+                    style={[styles.band, d.deck === "B" ? styles.deckB : styles.deckA, { opacity: 1 }]}
+                    onPress={() => {
+                      setDeck({ id: d._id, deck: d.deck === "B" ? "A" : "B" });
+                    }}
+                  >
+                    <Text style={styles.bandText}>Deck {d.deck === "B" ? "B" : "A"}</Text>
+                  </Pressable>
                 </View>
               ) : null}
             </View>
@@ -286,6 +384,10 @@ const styles = StyleSheet.create({
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: { backgroundColor: "#23232e", borderRadius: 999, paddingVertical: 10, paddingHorizontal: 16 },
   chipOn: { backgroundColor: "#7c5cff" },
+  chipB: { backgroundColor: "#e0692f" },
+  deckA: { backgroundColor: "#7c5cff" },
+  deckB: { backgroundColor: "#e0692f" },
+  rowTight: { flexDirection: "row", gap: 12, alignItems: "center" },
   volume: { flexDirection: "row", gap: 6, marginRight: 12 },
   volButton: {
     backgroundColor: "#2c2c39",
