@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "convex": {
+      "command": "npx",
+      "args": ["-y", "convex@latest", "mcp", "start"]
+    },
+    "revyl": {
+      "command": "revyl",
+      "args": ["mcp", "serve", "--profile", "dev"]
+    }
+  }
+}
