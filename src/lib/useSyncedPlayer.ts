@@ -7,6 +7,8 @@ type Playback = {
   startAt: number; // server ms at which track position 0 occurs
   pausedAt: number; // seconds
   muted: boolean;
+  volume: number; // 0 to 1
+  bands: { low: boolean; mid: boolean; high: boolean }; // browser only; ignored here
   nudgeMs: number;
 };
 
@@ -20,7 +22,7 @@ const SEEK_LAND_S = 0.06; // a seek takes roughly this long to take effect
  * Big errors are fixed with a seek; small ones by running slightly fast or
  * slow, which is inaudible and avoids the click a seek would cause.
  */
-export function useSyncedPlayer(source: number, playback: Playback | null) {
+export function useSyncedPlayer(source: number | string | null, playback: Playback | null) {
   const player = useAudioPlayer(source);
   const latest = useRef(playback);
   latest.current = playback;
@@ -36,7 +38,9 @@ export function useSyncedPlayer(source: number, playback: Playback | null) {
     const timer = setInterval(() => {
       const p = latest.current;
       if (!p) return;
-      player.volume = p.muted ? 0 : 1;
+      player.volume = p.muted ? 0 : p.volume;
+      // iPhone Safari ignores volume changes from code, so set muted as well.
+      player.muted = p.muted;
 
       if (!p.playing) {
         if (player.playing) player.pause();
@@ -77,5 +81,17 @@ export function useSyncedPlayer(source: number, playback: Playback | null) {
     return () => clearInterval(timer);
   }, [player]);
 
-  return { driftMs };
+  // Browsers only allow sound after a tap. Calling this from a tap handler
+  // "unlocks" the player so the sync loop can start it later on its own.
+  const unlock = () => {
+    try {
+      player.muted = true;
+      player.play();
+      setTimeout(() => {
+        if (!latest.current?.playing) player.pause();
+      }, 150);
+    } catch {}
+  };
+
+  return { driftMs, unlock, ready: true };
 }

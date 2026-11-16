@@ -54,7 +54,7 @@ export default function Home() {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
       style={styles.container}
     >
-      <Text style={styles.title}>Phone DJ</Text>
+      <Text style={styles.title}>Lyre</Text>
       <Text style={styles.subtitle}>Every phone is a speaker. One phone runs the set.</Text>
 
       <TextInput

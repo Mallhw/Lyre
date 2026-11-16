@@ -5,8 +5,21 @@ export const CONVEX_URL = process.env.EXPO_PUBLIC_CONVEX_URL ?? "";
 // Convex serves HTTP actions from the .convex.site twin of the .convex.cloud URL.
 const TIME_URL = CONVEX_URL.replace(".convex.cloud", ".convex.site") + "/time";
 
-// A random id for this app launch. Not stored, so a reload joins as a new phone.
-export const DEVICE_ID = Math.random().toString(36).slice(2, 10);
+// A random id for this phone. In a browser it is remembered across reloads,
+// so reloading the page keeps you as the same phone (and keeps you as DJ).
+function loadDeviceId(): string {
+  const fresh = Math.random().toString(36).slice(2, 10);
+  try {
+    if (typeof localStorage === "undefined") return fresh;
+    const saved = localStorage.getItem("lyre-device-id");
+    if (saved) return saved;
+    localStorage.setItem("lyre-device-id", fresh);
+  } catch {
+    // Private browsing can block storage; a per-load id still works.
+  }
+  return fresh;
+}
+export const DEVICE_ID = loadDeviceId();
 
 type Sample = { offset: number; rtt: number };
 let best: Sample | null = null;
